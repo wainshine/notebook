@@ -691,6 +691,27 @@ define([
     };
 
     /**
+     * Reads direction settings (LTR/RTL) from notebook/cells metadata
+     * and applies them to display elements.
+     */
+    Notebook.prototype.apply_directionality = function () {
+        var notebook_direction = this.metadata.direction || 'ltr';
+        // html
+        document.body.setAttribute('dir', notebook_direction);
+        // existing cells
+        this.get_cells().forEach( function(cell) {
+            if (cell.cell_type == 'markdown') {
+                cell.code_mirror.setOption('direction', cell.metadata.direction || notebook_direction);
+                cell.element.find('.rendered_html').attr('dir', cell.metadata.direction || notebook_direction);
+            } else if (cell.cell_type == 'code') {
+                cell.element.find('.output_text').attr('dir', cell.metadata.direction || 'auto');
+            }
+        });
+        // new cells
+        textcell.MarkdownCell.options_default.cm_config.direction = notebook_direction;
+    };
+
+    /**
      * Get the cell above a given cell.
      * 
      * @param {Cell} cell
@@ -1619,17 +1640,11 @@ define([
         var that = this;
         if (!this.paste_enabled) {
             $('#paste_cell_replace').removeClass('disabled')
-                .on('click', function () {that.keyboard_manager.actions.call(
-                    'jupyter-notebook:paste-cell-replace');});
-            $('#paste_cell_replace > a').attr('aria-disabled', 'false'); 
+            $('#paste_cell_replace > a').attr('aria-disabled', 'false');
             $('#paste_cell_above').removeClass('disabled')
-                .on('click', function () {that.keyboard_manager.actions.call(
-                    'jupyter-notebook:paste-cell-above');});
-            $('#paste_cell_above > a').attr('aria-disabled', 'false'); 
+            $('#paste_cell_above > a').attr('aria-disabled', 'false');
             $('#paste_cell_below').removeClass('disabled')
-                .on('click', function () {that.keyboard_manager.actions.call(
-                    'jupyter-notebook:paste-cell-below');});
-            $('#paste_cell_below > a').attr('aria-disabled', 'false');         
+            $('#paste_cell_below > a').attr('aria-disabled', 'false');
             this.paste_enabled = true;
         }
     };
@@ -1639,12 +1654,12 @@ define([
      */
     Notebook.prototype.disable_paste = function () {
         if (this.paste_enabled) {
-            $('#paste_cell_replace').addClass('disabled').off('click');
-            $('#paste_cell_replace > a').attr('aria-disabled', 'true'); 
-            $('#paste_cell_above').addClass('disabled').off('click');
-            $('#paste_cell_above > a').attr('aria-disabled', 'true'); 
-            $('#paste_cell_below').addClass('disabled').off('click');
-            $('#paste_cell_below > a').attr('aria-disabled', 'true'); 
+            $('#paste_cell_replace').addClass('disabled');
+            $('#paste_cell_replace > a').attr('aria-disabled', 'true');
+            $('#paste_cell_above').addClass('disabled');
+            $('#paste_cell_above > a').attr('aria-disabled', 'true');
+            $('#paste_cell_below').addClass('disabled');
+            $('#paste_cell_below > a').attr('aria-disabled', 'true');
             this.paste_enabled = false;
         }
     };
@@ -2662,6 +2677,9 @@ define([
             this.trusted = trusted;
             this.events.trigger("trust_changed.Notebook", trusted);
         }
+
+        this.apply_directionality();
+
     };
 
     /**
@@ -2902,6 +2920,14 @@ define([
                     click: function() {
                         var nb_path = d.find('input').val();
                         var nb_name = nb_path.split('/').slice(-1).pop();
+                        if (!nb_name) {
+                            $(".save-message").html(
+                                    $("<span>")
+                                        .attr("style", "color:red;")
+                                        .text($(".save-message").text())
+                                );
+                            return false;
+                        }
                         // If notebook name does not contain extension '.ipynb' add it
                         var ext = utils.splitext(nb_name)[1];
                         if (ext === '') {
